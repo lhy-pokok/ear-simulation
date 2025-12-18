@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>耳蝸流體動力學與毛細胞模擬 (Fluid Dynamics)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            border: 1px solid #334155;
+            background: #020617; /* Very dark for contrast */
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .control-btn {
+            transition: all 0.2s;
+        }
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+        .freq-label {
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+        .structure-label {
+            position: absolute;
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.7);
+            pointer-events: none;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="max-w-5xl w-full space-y-6">
+        <div class="text-center space-y-2">
+            <h1 class="text-3xl font-bold text-sky-400">耳蝸流體動力學模擬 (Cochlear Fluid Dynamics)</h1>
+            <p class="text-slate-400">觀察聲波進入前庭階 (Upper)，推動基底膜，並由鼓階 (Lower) 釋放壓力的完整路徑</p>
+            <div class="flex gap-2 justify-center flex-wrap">
+                <span class="inline-block bg-sky-900/50 text-sky-300 text-xs px-2 py-1 rounded border border-sky-800">
+                    🐢 超慢動作模式 (Super Slow Motion)
+                </span>
+                <span class="inline-block bg-green-900/50 text-green-300 text-xs px-2 py-1 rounded border border-green-800">
+                    ↩️ U型迴路演示 (U-Turn Path)
+                </span>
+                <span class="inline-block bg-slate-700 text-slate-300 text-xs px-2 py-1 rounded border border-slate-600">
+                    🌀 蝸孔效應 (Helicotrema Effect)
+                </span>
+            </div>
+        </div>
+
+        <!-- Canvas Container -->
+        <div class="relative w-full flex justify-center">
+            <canvas id="cochleaCanvas"></canvas>
+            
+            <!-- Anatomical Labels Overlay -->
+            <div class="structure-label" style="top: 10%; left: 80px;">
+                <span class="text-sky-300">Scala Vestibuli (上層/前庭階)</span><br>
+                <span class="text-xs font-normal text-slate-400">壓力波傳入 &rarr;</span>
+            </div>
+            
+            <div class="structure-label" style="top: 48%; right: 20px; text-align: right;">
+                <span class="text-yellow-400">Scala Media (中層)</span><br>
+                <span class="text-xs font-normal">基底膜 & 毛細胞</span>
+            </div>
+            
+            <div class="structure-label" style="bottom: 10%; left: 80px;">
+                <span class="text-blue-300">Scala Tympani (下層/鼓階)</span><br>
+                <span class="text-xs font-normal">&larr; 壓力波釋放</span>
+            </div>
+            
+            <div class="structure-label" style="top: 45%; right: 5px; width: 40px; text-align: center; color: #cbd5e1;">
+                <span class="text-[10px] leading-tight block">蝸孔<br>Helicotrema</span>
+            </div>
+
+            <!-- Window Labels -->
+            <div class="structure-label" style="top: 20%; left: 5px; width: 60px; text-align: center;">
+                <span class="text-xs text-white bg-red-900/50 px-1 rounded">卵圓窗<br>(In)</span>
+            </div>
+            <div class="structure-label" style="bottom: 20%; left: 5px; width: 60px; text-align: center;">
+                <span class="text-xs text-white bg-blue-900/50 px-1 rounded">圓窗<br>(Out)</span>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                <!-- Frequency Controls -->
+                <div class="space-y-4">
+                    <h3 class="font-semibold text-lg text-white border-b border-slate-600 pb-2">頻率測試 (Frequency Test)</h3>
+                    <div class="grid grid-cols-4 gap-2"> <!-- Changed to 4 cols -->
+                        <button onclick="playTone(8000)" class="control-btn bg-red-500 hover:bg-red-600 text-white py-3 px-2 rounded-lg shadow font-medium text-sm">
+                            8000 Hz
+                            <div class="freq-label text-[10px]">高頻 (Base)</div>
+                        </button>
+                        <button onclick="playTone(2000)" class="control-btn bg-green-600 hover:bg-green-700 text-white py-3 px-2 rounded-lg shadow font-medium text-sm">
+                            2000 Hz
+                            <div class="freq-label text-[10px]">中頻 (Mid)</div>
+                        </button>
+                        <button onclick="playTone(200)" class="control-btn bg-blue-600 hover:bg-blue-700 text-white py-3 px-2 rounded-lg shadow font-medium text-sm">
+                            200 Hz
+                            <div class="freq-label text-[10px]">低頻 (Apex)</div>
+                        </button>
+                        <button onclick="playTone(10)" class="control-btn bg-slate-600 hover:bg-slate-500 text-white py-3 px-2 rounded-lg shadow font-medium text-sm border border-slate-500">
+                            10 Hz
+                            <div class="freq-label text-[10px]">超低頻 (Sub)</div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Simulation Info -->
+                <div class="text-sm text-slate-300 space-y-2 bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+                    <p class="font-semibold text-sky-400">路徑觀察重點：</p>
+                    <ul class="list-disc list-inside space-y-1 text-slate-400 text-xs">
+                        <li>1️⃣ <span class="text-white">上層進入</span>：聲波從左上角出發，向右移動。</li>
+                        <li>2️⃣ <span class="text-yellow-400">觸發毛細胞</span>：可聽頻率(200-20k)會穿過中層並觸發黃色閃光。</li>
+                        <li>3️⃣ <span class="text-gray-300">超低頻 (10Hz)</span>：<span class="text-slate-200 bg-slate-700 px-1 rounded">特例</span> 聲波通過蝸孔旁路，<strong>基底膜不震動，毛細胞保持垂直</strong>。</li>
+                        <li>4️⃣ <span class="text-blue-300">下層回流</span>：聲波折返後流回出口，推動圓窗。</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="mt-6 pt-4 border-t border-slate-700 flex justify-between items-center">
+                <div id="statusText" class="text-sky-400 font-mono text-sm animate-pulse">準備就緒 (Ready)</div>
+                <div class="space-x-2">
+                     <button onclick="playSweep()" class="bg-purple-600 hover:bg-purple-500 text-white py-2 px-4 rounded text-sm font-bold shadow transition">
+                        掃描 (Sweep)
+                    </button>
+                    <button onclick="stopAudio()" class="bg-slate-600 hover:bg-slate-500 text-white py-2 px-6 rounded text-sm font-bold shadow transition">
+                        停止 (Stop)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('cochleaCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('statusText');
+
+        // Audio Context
+        let audioCtx = null;
+        let oscillators = [];
+        let gainNodes = [];
+        
+        // Simulation State
+        let activeFrequencies = []; 
+        let time = 0;
+        let isRunning = true;
+        
+        // WAVE PATH PROGRESS
+        let waveDist = 0; 
+        
+        const POINTS = 200;
+        
+        // Particles for Fluid Viz
+        let upperParticles = [];
+        let lowerParticles = [];
+        const NUM_PARTICLES = 150;
+
+        function initParticles() {
+            upperParticles = [];
+            lowerParticles = [];
+            for(let i=0; i<NUM_PARTICLES; i++) {
+                upperParticles.push({
+                    x: Math.random(), // 0-1 normalized position
+                    y: Math.random(), 
+                    baseX: Math.random() // store original relative x for elastic return
+                });
+                lowerParticles.push({
+                    x: Math.random(),
+                    y: Math.random(),
+                    baseX: Math.random()
+                });
+            }
+        }
+        
+        // Resize handling
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.offsetWidth;
+            canvas.height = 450;
+            initParticles();
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // --- Physics Helpers ---
+        function getCharacteristicPlace(freq) {
+            const maxF = 20000;
+            const minF = 20;
+            // Allow returning > 1.0 for infrasound
+            let pos = (Math.log10(maxF) - Math.log10(freq)) / (Math.log10(maxF) - Math.log10(minF));
+            return Math.max(0, pos); 
+        }
+
+        function getEnvelope(x, targetX) {
+            // Only used for membrane displacement now.
+            // Infrasound logic moved to loop to prevent any displacement.
+            const width = 0.08;
+            const diff = x - targetX;
+            if (diff <= 0) return Math.exp(-(diff * diff) / (2 * width * width)); 
+            else return Math.exp(-(diff * diff) / (2 * (width/4) * (width/4))); 
+        }
+
+        // --- Drawing ---
+
+        function drawArrow(ctx, x, y, size, direction, opacity) {
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            if (direction === 'right') {
+                ctx.lineTo(x - size, y - size/2);
+                ctx.moveTo(x, y);
+                ctx.lineTo(x - size, y + size/2);
+                ctx.moveTo(x, y);
+                ctx.lineTo(x - size * 2, y);
+            } else {
+                ctx.lineTo(x + size, y - size/2);
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + size, y + size/2);
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + size * 2, y);
+            }
+            ctx.save();
+            ctx.globalAlpha = opacity;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function draw() {
+            if (!isRunning) return;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            // Layout dimensions
+            const upperH = h * 0.35;
+            const middleH = h * 0.25; 
+            const lowerH = h * 0.35;
+            const startX = 60; 
+            const activeW = w - startX;
+            
+            const upperY = 0;
+            const middleY = upperH;
+            const lowerY = upperH + middleH;
+
+            // --- 1. Draw Structure Walls ---
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, w, h);
+
+            // Channel Backgrounds
+            // Upper
+            const gradUpper = ctx.createLinearGradient(0, 0, 0, upperH);
+            gradUpper.addColorStop(0, '#1e3a8a');
+            gradUpper.addColorStop(1, '#172554');
+            ctx.fillStyle = gradUpper;
+            ctx.fillRect(startX, upperY, activeW, upperH);
+            
+            // Lower
+            const gradLower = ctx.createLinearGradient(0, lowerY, 0, h);
+            gradLower.addColorStop(0, '#172554');
+            gradLower.addColorStop(1, '#1e3a8a');
+            ctx.fillStyle = gradLower;
+            ctx.fillRect(startX, lowerY, activeW, lowerH);
+
+            // Open Apex (Helicotrema) visual cue
+            ctx.fillStyle = '#1e3a8a';
+            ctx.fillRect(w - 5, upperH, 5, middleH); // Connect upper/lower at end
+
+            // --- 2. Input/Output Mechanisms (Windows) ---
+            const SLOW_MO_DIVIDER = 200; 
+            
+            let stapesDisp = 0;
+            if (activeFrequencies.length > 0) {
+                 activeFrequencies.forEach(af => {
+                     stapesDisp += Math.sin(2 * Math.PI * af.freq * time/SLOW_MO_DIVIDER) * 10;
+                 });
+                 stapesDisp = Math.max(-8, Math.min(8, stapesDisp));
+                 if (waveDist < 0.05) stapesDisp *= (waveDist / 0.05);
+            }
+
+            // Draw Oval Window / Stapes
+            ctx.save();
+            ctx.fillStyle = '#94a3b8'; 
+            ctx.fillRect(10 + stapesDisp, upperH/2 - 5, 40, 10); 
+            ctx.fillStyle = '#cbd5e1';
+            ctx.beginPath();
+            ctx.ellipse(50 + stapesDisp, upperH/2, 8, upperH/3, 0, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.fillRect(startX, upperH/2 - upperH/3, 5, upperH*0.66);
+            ctx.restore();
+
+
+            // --- 3. Fluid Dynamics with U-TURN PATH LOGIC ---
+            
+            const getPressure = (x, channel) => {
+                let p = 0;
+                
+                activeFrequencies.forEach(af => {
+                    const rawTargetX = getCharacteristicPlace(af.freq);
+                    // For fluid mechanics, turn around point is capped at 1.0 (Apex/Helicotrema)
+                    const turnAroundX = Math.min(1.0, rawTargetX);
+                    
+                    if (channel === 'upper') {
+                        if (x > turnAroundX + 0.1) return; // Don't go past resonance/apex
+                        if (x > waveDist) return;      // Wave hasn't reached yet
+
+                        let frontEnv = 1;
+                        if (x > waveDist - 0.1) frontEnv = (waveDist - x) / 0.1;
+                        if (frontEnv < 0) frontEnv = 0;
+
+                        const k = 10 + 40 * x; 
+                        const phase = -(k*x);
+                        
+                        // Envelope logic for fluid: infrasound stays strong till end
+                        let env;
+                        if (rawTargetX > 1.0) env = 1.0; 
+                        else env = (x > rawTargetX) ? Math.max(0, 1 - (x-rawTargetX)*10) : 1;
+                        
+                        p += Math.sin(2 * Math.PI * af.freq * time/SLOW_MO_DIVIDER + phase) * af.amplitude * env * frontEnv;
+                    }
+                    
+                    if (channel === 'lower') {
+                        // For infrasound (rawTargetX > 1), wave turns around at 1.0
+                        if (x > turnAroundX + 0.1) return; 
+                        
+                        const distNeeded = 2 * turnAroundX - x;
+                        if (waveDist < distNeeded) return; 
+
+                        // Front envelope for return wave
+                        const xFront = 2 * turnAroundX - waveDist;
+                        let frontEnv = 1;
+                        if (x < xFront + 0.1) frontEnv = (x - xFront) / 0.1;
+                        if (frontEnv < 0) frontEnv = 0;
+                        if (frontEnv > 1) frontEnv = 1;
+
+                        const k = 10 + 40 * x; 
+                        const phase = -(k*x) + Math.PI; 
+                        
+                        let env;
+                        if (rawTargetX > 1.0) env = 1.0;
+                        else env = (x > rawTargetX) ? Math.max(0, 1 - (x-rawTargetX)*10) : 1;
+
+                        p += Math.sin(2 * Math.PI * af.freq * time/SLOW_MO_DIVIDER + phase) * af.amplitude * env * frontEnv;
+                    }
+                });
+                return p;
+            };
+
+            // Round Window Displacement
+            let rwPressure = getPressure(0, 'lower');
+            let roundWindowDisp = rwPressure / 3; 
+            roundWindowDisp = Math.max(-8, Math.min(8, roundWindowDisp));
+
+
+            // Draw Round Window
+            ctx.save();
+            ctx.beginPath();
+            const rwCenterY = lowerY + lowerH/2;
+            const rwHeight = lowerH * 0.6;
+            ctx.moveTo(startX, rwCenterY - rwHeight/2);
+            ctx.bezierCurveTo(
+                startX + roundWindowDisp * 1.5, rwCenterY - rwHeight/4, 
+                startX + roundWindowDisp * 1.5, rwCenterY + rwHeight/4, 
+                startX, rwCenterY + rwHeight/2
+            );
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+             if (Math.abs(roundWindowDisp) > 0.5) ctx.fillStyle = 'rgba(100, 200, 255, 0.6)';
+            else ctx.fillStyle = 'rgba(100, 200, 255, 0.2)';
+            ctx.fill();
+            ctx.restore();
+
+
+            // Draw Pressure Waves
+            const strips = 80; 
+            const stripW = activeW / strips;
+            for(let i=0; i<strips; i++) {
+                const xNorm = i / strips;
+                const pUpper = getPressure(xNorm, 'upper');
+                const pLower = getPressure(xNorm, 'lower');
+                
+                if (Math.abs(pUpper) > 2) {
+                    ctx.fillStyle = `rgba(200, 230, 255, ${Math.min(0.2, Math.abs(pUpper)/150)})`;
+                    ctx.fillRect(startX + i*stripW, upperY, stripW, upperH);
+                }
+                if (Math.abs(pLower) > 2) {
+                    ctx.fillStyle = `rgba(200, 230, 255, ${Math.min(0.2, Math.abs(pLower)/150)})`;
+                    ctx.fillRect(startX + i*stripW, lowerY, stripW, lowerH);
+                }
+            }
+
+            // Draw Particles
+            ctx.fillStyle = 'rgba(147, 197, 253, 0.6)';
+            
+            [upperParticles, lowerParticles].forEach((particles, idx) => {
+                const isUpper = idx === 0;
+                const yOffset = isUpper ? upperY : lowerY;
+                const chH = isUpper ? upperH : lowerH;
+                const channelName = isUpper ? 'upper' : 'lower';
+
+                particles.forEach(p => {
+                    const pressure = getPressure(p.baseX, channelName);
+                    
+                    if (Math.abs(pressure) > 0.1) {
+                        const displacementX = (pressure / 1000); 
+                        let drawX = startX + (p.baseX + displacementX) * activeW;
+                        let drawY = yOffset + p.y * chH;
+                        drawX = Math.max(startX, Math.min(w, drawX));
+                        ctx.beginPath();
+                        ctx.arc(drawX, drawY, 2, 0, Math.PI*2);
+                        ctx.fill();
+                    } else {
+                        let drawX = startX + p.baseX * activeW;
+                        let drawY = yOffset + p.y * chH;
+                        ctx.beginPath();
+                        ctx.arc(drawX, drawY, 1.5, 0, Math.PI*2);
+                        ctx.fill();
+                    }
+                });
+            });
+
+            // --- 3.5 Draw Flow Arrows ---
+            if (activeFrequencies.length > 0) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.lineWidth = 2;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                const arrowSpacing = 60;
+                const animOffset = (time * 5) % arrowSpacing; 
+
+                // Upper Channel Arrows
+                for (let x = startX + animOffset; x < w; x += arrowSpacing) {
+                    const xNorm = (x - startX) / activeW;
+                    let activeHere = false;
+                    activeFrequencies.forEach(af => {
+                        const tX = getCharacteristicPlace(af.freq);
+                        const limitX = Math.min(1.0, tX);
+                        if (xNorm < limitX && xNorm < waveDist) activeHere = true;
+                    });
+
+                    if (activeHere) {
+                         drawArrow(ctx, x, upperY + upperH/2, 8, 'right', 1);
+                    }
+                }
+
+                // Lower Channel Arrows
+                const animOffsetLeft = (arrowSpacing - ((time * 5) % arrowSpacing));
+                for (let x = startX + animOffsetLeft; x < w; x += arrowSpacing) {
+                    const xNorm = (x - startX) / activeW;
+                    
+                    let activeHere = false;
+                    activeFrequencies.forEach(af => {
+                        const tX = getCharacteristicPlace(af.freq);
+                        const turnAroundX = Math.min(1.0, tX);
+                        const distNeeded = 2 * turnAroundX - xNorm;
+                        
+                        if (xNorm < turnAroundX && waveDist > distNeeded) activeHere = true;
+                    });
+
+                    if (activeHere) {
+                        drawArrow(ctx, x, lowerY + lowerH/2, 8, 'left', 1);
+                    }
+                }
+            }
+            
+
+            // --- 4. Middle Channel & Basilar Membrane ---
+            ctx.fillStyle = '#1e293b'; 
+            ctx.fillRect(startX, middleY, activeW, middleH);
+
+            let displacements = new Float32Array(POINTS + 1);
+            if (activeFrequencies.length > 0) {
+                for (let i = 0; i <= POINTS; i++) {
+                    const xNorm = i / POINTS;
+                    
+                    activeFrequencies.forEach(af => {
+                        if (xNorm > waveDist) return;
+
+                        const rawTargetX = getCharacteristicPlace(af.freq);
+                        
+                        // CRITICAL FIX: If infrasound (target > 1.0), BYPASS MEMBRANE
+                        // This keeps displacements at 0, cells vertical.
+                        if (rawTargetX > 1.05) return;
+
+                        const k = 20 + 80 * xNorm; 
+                        const phaseLag = k * xNorm; 
+                        
+                        let envelope = getEnvelope(xNorm, rawTargetX);
+                        if (rawTargetX <= 1.0 && xNorm > rawTargetX + 0.15) envelope = 0; 
+                        
+                        let frontEnv = 1;
+                        if (xNorm > waveDist - 0.1) frontEnv = (waveDist - xNorm) / 0.1;
+                        if (frontEnv < 0) frontEnv = 0;
+
+                        const signal = Math.sin(2 * Math.PI * af.freq * time/SLOW_MO_DIVIDER - phaseLag);
+                        displacements[i] += signal * envelope * af.amplitude * frontEnv;
+                    });
+                }
+            }
+
+            // Draw Membrane
+            ctx.beginPath();
+            ctx.lineWidth = 4;
+            const grad = ctx.createLinearGradient(startX, 0, w, 0);
+            grad.addColorStop(0, '#f87171');
+            grad.addColorStop(0.5, '#4ade80');
+            grad.addColorStop(1, '#60a5fa');
+            ctx.strokeStyle = grad;
+
+            const visualMembraneY = middleY + middleH * 0.8; 
+
+            for (let i = 0; i <= POINTS; i++) {
+                const xPx = startX + (i / POINTS) * activeW;
+                const disp = displacements[i];
+                const cleanDisp = Math.max(-30, Math.min(30, disp));
+                const yPx = visualMembraneY + cleanDisp;
+                
+                if (i === 0) ctx.moveTo(xPx, yPx);
+                else ctx.lineTo(xPx, yPx);
+            }
+            ctx.stroke();
+
+            // Draw Hair Cells
+            for (let i = 0; i <= POINTS; i += 4) {
+                const xPx = startX + (i / POINTS) * activeW;
+                const xNorm = i / POINTS;
+                
+                // REMOVED: if (xNorm > waveDist) continue;
+                // This ensures hair cells are always drawn.
+                // If wave hasn't reached, displacements[i] is 0, so they are vertical.
+
+                const disp = displacements[i];
+                const cleanDisp = Math.max(-30, Math.min(30, disp));
+                
+                if (xPx > startX && xPx < w) {
+                    const baseX = xPx;
+                    const baseY = visualMembraneY + cleanDisp; 
+
+                    const bendAmount = cleanDisp * 0.4; 
+                    const cellHeight = middleH * 0.5;
+                    
+                    const tipX = baseX + bendAmount;
+                    const tipY = baseY - cellHeight;
+
+                    // Trigger Logic
+                    let isAudible = false;
+                    activeFrequencies.forEach(af => { if(af.freq >= 20) isAudible = true; });
+
+                    const isTriggered = Math.abs(cleanDisp) > 8 && isAudible;
+                    
+                    ctx.beginPath();
+                    ctx.lineWidth = 2;
+                    if (isTriggered) {
+                        ctx.strokeStyle = '#facc15'; 
+                        ctx.shadowBlur = 10;
+                        ctx.shadowColor = '#facc15';
+                    } else {
+                        ctx.strokeStyle = '#475569'; 
+                        ctx.shadowBlur = 0;
+                    }
+                    
+                    ctx.moveTo(baseX, baseY);
+                    ctx.lineTo(tipX, tipY);
+                    ctx.stroke();
+                    ctx.shadowBlur = 0; 
+                    
+                    if (isTriggered) {
+                        ctx.fillStyle = '#facc15';
+                        ctx.beginPath();
+                        ctx.arc(baseX, baseY - 3, 2, 0, Math.PI*2);
+                        ctx.fill();
+                    }
+                }
+            }
+            
+            // Masking left side
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, startX, h);
+            
+            // Stapes Re-draw
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(10 + stapesDisp, upperH/2 - 5, 40, 10); 
+            ctx.fillStyle = '#cbd5e1';
+            ctx.beginPath();
+            ctx.ellipse(50 + stapesDisp, upperH/2, 8, upperH/3, 0, 0, Math.PI*2);
+            ctx.fill();
+            
+            // Redraw RW (Reactive)
+            ctx.save();
+            ctx.beginPath();
+            const rwCenterY2 = lowerY + lowerH/2;
+            const rwHeight2 = lowerH * 0.6;
+            ctx.moveTo(startX, rwCenterY2 - rwHeight2/2);
+            ctx.bezierCurveTo(
+                startX + roundWindowDisp * 1.5, rwCenterY2 - rwHeight2/4, 
+                startX + roundWindowDisp * 1.5, rwCenterY2 + rwHeight2/4, 
+                startX, rwCenterY2 + rwHeight2/2
+            );
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+             if (Math.abs(roundWindowDisp) > 0.5) ctx.fillStyle = 'rgba(100, 200, 255, 0.6)';
+            else ctx.fillStyle = 'rgba(100, 200, 255, 0.2)';
+            ctx.fill();
+            ctx.restore();
+
+            // Update States
+            time += 0.002; 
+            
+            // PROPAGATION UPDATE (Distance Traveled)
+            // Allow it to go up to 2.5 (enough for full return trip of lowest freq)
+            if (activeFrequencies.length > 0 && waveDist < 2.5) {
+                waveDist += 0.001; 
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        // --- Audio Handling ---
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function stopAudio() {
+            oscillators.forEach(osc => {
+                try { osc.stop(); } catch(e){}
+            });
+            oscillators = [];
+            activeFrequencies = [];
+            waveDist = 0;
+            
+            statusText.innerText = "已停止 (Stopped)";
+            statusText.className = "text-slate-400 font-mono text-sm";
+        }
+
+        function playTone(freq) {
+            initAudio();
+            stopAudio();
+            
+            waveDist = 0; 
+            
+            statusText.innerText = `播放中: ${freq} Hz - 聲波傳遞中...`;
+            statusText.className = "text-green-400 font-mono text-sm animate-pulse";
+            startOscillator(freq, 1.0);
+        }
+
+        function playSweep() {
+            initAudio();
+            stopAudio();
+            
+            waveDist = 0;
+            
+            statusText.innerText = `掃描中 (Sweeping)...`;
+            statusText.className = "text-purple-400 font-mono text-sm animate-pulse";
+            
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            const now = audioCtx.currentTime;
+            const duration = 8;
+            osc.frequency.setValueAtTime(10000, now);
+            osc.frequency.exponentialRampToValueAtTime(100, now + duration);
+            
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.linearRampToValueAtTime(0, now + duration);
+
+            osc.start(now);
+            osc.stop(now + duration);
+            oscillators.push(osc);
+            
+            let currentFreq = 10000;
+            const sweepInterval = setInterval(() => {
+                if (currentFreq <= 100) {
+                    clearInterval(sweepInterval);
+                    activeFrequencies = [];
+                    return;
+                }
+                currentFreq *= 0.99; 
+                activeFrequencies = [{ freq: currentFreq, amplitude: 40 }];
+            }, 16);
+            oscillators.push({ stop: () => clearInterval(sweepInterval) }); 
+        }
+
+        function startOscillator(freq, vol) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(vol * 0.2, audioCtx.currentTime + 0.1); 
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            
+            oscillators.push(osc);
+            gainNodes.push(gain);
+            activeFrequencies.push({ freq: freq, amplitude: 50 * vol });
+        }
+
+        // Init
+        initParticles();
+        requestAnimationFrame(draw);
+
+    </script>
+</body>
+</html>
